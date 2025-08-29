@@ -1,0 +1,22 @@
+# Framework web
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Validazione e configurazione
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP client
+aiohttp==3.9.1
+
+# Elaborazione immagini
+Pillow==10.1.0
+
+# Logging e utilità
+python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# Dipendenze opzionali per provider specifici
+# openai==1.3.7  # Per OpenAI
+# anthropic==0.7.7  # Per Claude
+# google-generativeai==0.3.2  # Per Gemini

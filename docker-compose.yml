@@ -1,0 +1,53 @@
+services:
+  generic-image-analyzer:
+    build: .
+    container_name: generic-image-analyzer
+    ports:
+      - "${PORT:-8006}:${PORT:-8006}"
+    environment:
+      # Server
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8006}
+      - DEBUG=${DEBUG:-false}
+      
+      # Sicurezza (opzionale)
+      - API_KEY=${API_KEY:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_DIR=logs
+      
+      # Limiti immagini
+      - MAX_IMAGE_SIZE_MB=${MAX_IMAGE_SIZE_MB:-10}
+      - MIN_IMAGE_WIDTH=${MIN_IMAGE_WIDTH:-32}
+      - MIN_IMAGE_HEIGHT=${MIN_IMAGE_HEIGHT:-32}
+      - MAX_IMAGE_WIDTH=${MAX_IMAGE_WIDTH:-4096}
+      - MAX_IMAGE_HEIGHT=${MAX_IMAGE_HEIGHT:-4096}
+      
+      # Formati supportati
+      - SUPPORTED_FORMATS=${SUPPORTED_FORMATS:-jpg,jpeg,png,webp,gif,bmp}
+      
+      # Performance
+      - ANALYSIS_TIMEOUT=${ANALYSIS_TIMEOUT:-60}
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-5}
+      
+      # Rate limiting
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-3600}
+      
+    volumes:
+      - ./logs:/app/logs
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    name: generic-image-analyzer-network
