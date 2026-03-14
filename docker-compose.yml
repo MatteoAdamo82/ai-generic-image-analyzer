@@ -11,7 +11,7 @@ services:
       - DEBUG=${DEBUG:-false}
       
       # Sicurezza (opzionale)
-      - API_KEY=${API_KEY:-}
+      - SERVICE_JWT_SECRET=${SERVICE_JWT_SECRET:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       
       # Logging

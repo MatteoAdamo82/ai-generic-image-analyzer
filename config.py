@@ -54,6 +54,7 @@ class ServiceConfig(BaseSettings):
     # SERVICE_JWT_SECRET: secret condiviso con whatsagent per autenticazione M2M (JWT HS256).
     # Deve corrispondere a IMAGE_ANALYZER_SERVICE_JWT_SECRET nel .env di whatsagent.
     # Se non impostato l'autenticazione è disabilitata (solo per sviluppo!).
+    api_key: Optional[str] = Field(default=None, env="API_KEY")
     service_jwt_secret: Optional[str] = Field(default=None, env="SERVICE_JWT_SECRET")
     allowed_origins: str = Field(default="*", env="ALLOWED_ORIGINS")
     
