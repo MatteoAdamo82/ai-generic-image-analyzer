@@ -329,7 +329,7 @@ Endpoint principale per l'analisi delle immagini
 ## ⚙️ Configurazione
 
 ### Variabili d'Ambiente
-+---------------------------|------------------------------------------|-------------------------------------+
+
 | Variable                  | Default                                  | Description                         |
 |---------------------------|------------------------------------------|-------------------------------------|  
 | `HOST`                    | `0.0.0.0`                                | Server host address                 |
@@ -347,7 +347,6 @@ Endpoint principale per l'analisi delle immagini
 | `ANALYSIS_TIMEOUT`        | `60`                                     | Analysis timeout in seconds         |
 | `SUPPORTED_PROVIDERS`     | `openai,claude,ollama,openrouter,gemini` | Supported AI providers              |
 | `MAX_CONCURRENT_REQUESTS` | `5`                                      | Maximum concurrent requests         | 
-+---------------------------|------------------------------------------|-------------------------------------+
 
 ## 🔒 Sicurezza
 
