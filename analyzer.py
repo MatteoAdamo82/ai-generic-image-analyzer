@@ -9,7 +9,7 @@ from PIL import Image
 from typing import Optional, Dict, Any
 import logging
 
-from config import AIProviderConfig, ServiceConfig, ImageType, DocumentType
+from config import AIProviderConfig, ServiceConfig, ImageType, DocumentType, AIProvider
 from models import (
     AnalysisRequest, AnalysisResult, TokenUsage, ExtractedData,
     PersonData, DocumentData, FinancialData, BusinessData, ProductData
@@ -25,17 +25,17 @@ class ImageAnalyzer:
         self.config = config
         
     async def analyze_image(self, request: AnalysisRequest) -> AnalysisResult:
-        """Analizza un'immagine e restituisce i risultati strutturati"""
+        """Analizza un'immagine o un PDF e restituisce i risultati strutturati"""
         start_time = time.time()
-        
+
         try:
-            # Valida l'immagine
-            await self._validate_image(request.image_data, request.image_format)
-            
+            # Valida il media (immagine o PDF)
+            await self._validate_media(request.image_data, request.image_format)
+
             # Crea il provider AI
             ai_config = AIProviderConfig(**request.ai_config)
             provider = create_ai_provider(ai_config)
-            
+
             # Esegui l'analisi
             prompt = request.prompt or provider._get_default_prompt()
             raw_result, token_usage = await provider.analyze_image(
@@ -43,13 +43,13 @@ class ImageAnalyzer:
                 request.image_format,
                 prompt
             )
-            
+
             # Parsing del risultato JSON
             parsed_result = await self._parse_ai_response(raw_result)
-            
+
             # Costruisci il risultato finale
             processing_time = time.time() - start_time
-            
+
             result = AnalysisResult(
                 success=True,
                 image_type=self._parse_image_type(parsed_result.get('image_type')),
@@ -61,14 +61,14 @@ class ImageAnalyzer:
                 ai_provider=ai_config.provider,
                 ai_model_used=ai_config.model
             )
-            
-            logger.info(f"Analisi completata in {processing_time:.2f}s - Tipo: {result.image_type}")
+
+            logger.info(f"Analisi completata in {processing_time:.2f}s - Tipo: {result.image_type} - Formato: {request.image_format}")
             return result
-            
+
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(f"Errore nell'analisi: {e}", exc_info=True)
-            
+
             return AnalysisResult(
                 success=False,
                 error_message=str(e),
@@ -76,41 +76,52 @@ class ImageAnalyzer:
                 processing_time=processing_time
             )
     
-    async def _validate_image(self, image_data: str, image_format: str) -> None:
-        """Valida i dati dell'immagine"""
+    async def _validate_media(self, image_data: str, image_format: str) -> None:
+        """Valida un media (immagine o PDF) prima dell'analisi"""
+        fmt = image_format.lower()
+
+        # Verifica formato supportato
+        if fmt not in self.config.supported_formats_list:
+            raise ValueError(f"Formato non supportato: {image_format}")
+
+        # Normalizza base64
+        if image_data.startswith('data:'):
+            image_data = image_data.split(',')[1]
+
         try:
-            # Rimuovi il prefixo data URL se presente
-            if image_data.startswith('data:'):
-                image_data = image_data.split(',')[1]
-            
-            # Decodifica base64
-            image_bytes = base64.b64decode(image_data)
-            
-            # Verifica dimensione
-            if len(image_bytes) > self.config.max_image_size_bytes:
-                raise ValueError(f"Immagine troppo grande: {len(image_bytes)} bytes (max: {self.config.max_image_size_bytes})")
-            
-            # Verifica formato
-            if image_format.lower() not in self.config.supported_formats_list:
-                raise ValueError(f"Formato non supportato: {image_format}")
-            
-            # Verifica che sia un'immagine valida
-            try:
-                with Image.open(BytesIO(image_bytes)) as img:
-                    width, height = img.size
-                    
-                    # Verifica dimensioni
-                    if width < self.config.min_image_width or height < self.config.min_image_height:
-                        raise ValueError(f"Immagine troppo piccola: {width}x{height}")
-                    
-                    if width > self.config.max_image_width or height > self.config.max_image_height:
-                        raise ValueError(f"Immagine troppo grande: {width}x{height}")
-                        
-            except Exception as e:
-                raise ValueError(f"Immagine non valida: {e}")
-                
+            media_bytes = base64.b64decode(image_data)
         except Exception as e:
-            raise ValueError(f"Errore nella validazione dell'immagine: {e}")
+            raise ValueError(f"Dati base64 non validi: {e}")
+
+        if fmt == "pdf":
+            await self._validate_pdf(media_bytes)
+        else:
+            await self._validate_image(media_bytes)
+
+    async def _validate_pdf(self, pdf_bytes: bytes) -> None:
+        """Valida un PDF"""
+        if len(pdf_bytes) > self.config.max_pdf_size_bytes:
+            raise ValueError(
+                f"PDF troppo grande: {len(pdf_bytes)} bytes (max: {self.config.max_pdf_size_bytes})"
+            )
+        if not pdf_bytes.startswith(b'%PDF'):
+            raise ValueError("Il file non sembra un PDF valido (header mancante)")
+
+    async def _validate_image(self, image_bytes: bytes) -> None:
+        """Valida un'immagine tramite PIL"""
+        if len(image_bytes) > self.config.max_image_size_bytes:
+            raise ValueError(
+                f"Immagine troppo grande: {len(image_bytes)} bytes (max: {self.config.max_image_size_bytes})"
+            )
+        try:
+            with Image.open(BytesIO(image_bytes)) as img:
+                width, height = img.size
+                if width < self.config.min_image_width or height < self.config.min_image_height:
+                    raise ValueError(f"Immagine troppo piccola: {width}x{height}")
+                if width > self.config.max_image_width or height > self.config.max_image_height:
+                    raise ValueError(f"Immagine troppo grande: {width}x{height}")
+        except Exception as e:
+            raise ValueError(f"Immagine non valida: {e}")
     
     async def _parse_ai_response(self, raw_response: str) -> Dict[str, Any]:
         """Parsing della risposta AI in formato JSON"""

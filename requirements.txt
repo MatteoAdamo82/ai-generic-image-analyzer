@@ -2,6 +2,9 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 
+# Autenticazione JWT inter-servizio (machine-to-machine)
+PyJWT==2.8.0
+
 # Validazione e configurazione
 pydantic==2.5.0
 pydantic-settings==2.1.0
@@ -11,6 +14,9 @@ aiohttp==3.9.1
 
 # Elaborazione immagini
 Pillow==10.1.0
+
+# Elaborazione PDF
+pypdf>=4.0.0
 
 # Logging e utilità
 python-multipart==0.0.6

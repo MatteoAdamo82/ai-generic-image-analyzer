@@ -15,7 +15,7 @@ class AIProvider(str, Enum):
     GEMINI = "gemini"
 
 class ImageType(str, Enum):
-    """Tipi di immagine riconosciuti"""
+    """Tipi di media riconosciuti"""
     PHOTO = "photo"
     SELFIE = "selfie"
     DOCUMENT = "document"
@@ -29,6 +29,7 @@ class ImageType(str, Enum):
     SCREENSHOT = "screenshot"
     PRODUCT = "product"
     TEXT = "text"
+    PDF = "pdf"
     OTHER = "other"
 
 class DocumentType(str, Enum):
@@ -50,7 +51,10 @@ class ServiceConfig(BaseSettings):
     debug: bool = Field(default=False, env="DEBUG")
     
     # Sicurezza
-    api_key: Optional[str] = Field(default=None, env="API_KEY")
+    # SERVICE_JWT_SECRET: secret condiviso con whatsagent per autenticazione M2M (JWT HS256).
+    # Deve corrispondere a IMAGE_ANALYZER_SERVICE_JWT_SECRET nel .env di whatsagent.
+    # Se non impostato l'autenticazione è disabilitata (solo per sviluppo!).
+    service_jwt_secret: Optional[str] = Field(default=None, env="SERVICE_JWT_SECRET")
     allowed_origins: str = Field(default="*", env="ALLOWED_ORIGINS")
     
     # Logging
@@ -63,9 +67,13 @@ class ServiceConfig(BaseSettings):
     min_image_height: int = Field(default=32, env="MIN_IMAGE_HEIGHT")
     max_image_width: int = Field(default=4096, env="MAX_IMAGE_WIDTH")
     max_image_height: int = Field(default=4096, env="MAX_IMAGE_HEIGHT")
-    
+
+    # Limiti PDF
+    max_pdf_size_mb: int = Field(default=20, env="MAX_PDF_SIZE_MB")
+    max_pdf_pages: int = Field(default=10, env="MAX_PDF_PAGES")
+
     # Formati supportati
-    supported_formats: str = Field(default="jpg,jpeg,png,webp,gif,bmp", env="SUPPORTED_FORMATS")
+    supported_formats: str = Field(default="jpg,jpeg,png,webp,gif,bmp,pdf", env="SUPPORTED_FORMATS")
     
     # Timeout e performance
     analysis_timeout: int = Field(default=60, env="ANALYSIS_TIMEOUT")
@@ -103,6 +111,11 @@ class ServiceConfig(BaseSettings):
     def max_image_size_bytes(self) -> int:
         """Dimensione massima immagine in bytes"""
         return self.max_image_size_mb * 1024 * 1024
+
+    @property
+    def max_pdf_size_bytes(self) -> int:
+        """Dimensione massima PDF in bytes"""
+        return self.max_pdf_size_mb * 1024 * 1024
     
     @property
     def supported_formats_list(self) -> List[str]:

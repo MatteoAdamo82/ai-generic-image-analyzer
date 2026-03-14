@@ -3,7 +3,9 @@
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt as pyjwt
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -41,11 +43,12 @@ async def lifespan(app: FastAPI):
         config = get_config()
         analyzer = ImageAnalyzer(config)
         
-        logger.info(f"Servizio generico di analisi immagini avviato")
+        logger.info(f"Servizio generico di analisi media avviato")
         logger.info(f"Host: {config.host}:{config.port}")
         logger.info(f"Debug: {config.debug}")
         logger.info(f"Formati supportati: {', '.join(config.supported_formats_list)}")
-        logger.info(f"Dimensione massima: {config.max_image_size_mb}MB")
+        logger.info(f"Dimensione massima immagine: {config.max_image_size_mb}MB")
+        logger.info(f"Dimensione massima PDF: {config.max_pdf_size_mb}MB (max {config.max_pdf_pages} pagine)")
         
         yield
         
@@ -61,9 +64,9 @@ async def lifespan(app: FastAPI):
 
 # Creazione app FastAPI
 app = FastAPI(
-    title="Generic Image Analyzer",
-    description="Servizio generico per l'analisi di immagini con AI",
-    version="1.0.0",
+    title="Generic Media Analyzer",
+    description="Servizio generico per l'analisi di immagini e PDF con AI",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -93,21 +96,54 @@ async def log_requests(request: Request, call_next):
     
     return response
 
-# Dependency per validazione API key (opzionale)
-async def validate_api_key(x_api_key: Optional[str] = Header(None)):
-    """Valida l'API key se configurata"""
-    config = get_config()
-    
-    # Log temporaneo per debug
-    logger.info(f"API Key ricevuta: {x_api_key}")
-    logger.info(f"API Key configurata: {config.api_key}")
-    
-    if config.api_key and x_api_key != config.api_key:
-        raise HTTPException(
-            status_code=401, 
-            detail="API key non valida o mancante"
+# ── Autenticazione inter-servizio (JWT HS256) ─────────────────────────────────
+
+_bearer = HTTPBearer(auto_error=True)
+
+async def validate_service_jwt(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+) -> bool:
+    """Valida il JWT di servizio emesso da whatsagent.
+
+    Il token deve:
+      - essere firmato con SERVICE_JWT_SECRET
+      - avere iss = "whatsagent"
+      - non essere scaduto
+
+    Se SERVICE_JWT_SECRET non è configurato emette un warning e lascia passare
+    (utile in fase di sviluppo; in produzione il secret deve sempre essere impostato).
+    """
+    svc_config = get_config()
+    secret = svc_config.service_jwt_secret
+
+    if not secret:
+        logger.warning(
+            "[ServiceAuth] SERVICE_JWT_SECRET non configurato: "
+            "richiesta accettata senza verifica JWT."
         )
-    return True
+        return True
+
+    try:
+        payload = pyjwt.decode(
+            credentials.credentials,
+            secret,
+            algorithms=["HS256"],
+            options={"require": ["iss", "sub", "exp"]},
+        )
+        if payload.get("iss") != "whatsagent":
+            raise pyjwt.InvalidIssuerError("Issuer non valido")
+        logger.debug(f"[ServiceAuth] Token valido — sub={payload.get('sub')}")
+        return True
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token di servizio scaduto",
+        )
+    except pyjwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token di servizio non valido: {exc}",
+        )
 
 # Exception handler personalizzato
 @app.exception_handler(Exception)
@@ -130,17 +166,17 @@ async def health_check():
     """Endpoint per il controllo dello stato del servizio"""
     return {
         "status": "healthy",
-        "service": "generic-image-analyzer",
-        "version": "1.0.0",
+        "service": "generic-media-analyzer",
+        "version": "2.0.0",
         "analyzer_ready": analyzer is not None
     }
 
 @app.post("/analyze", response_model=AnalysisResult)
 async def analyze_image(
     request: AnalysisRequest,
-    _: bool = Depends(validate_api_key)
+    _: bool = Depends(validate_service_jwt),
 ):
-    """Analizza un'immagine"""
+    """Analizza un'immagine o un PDF"""
     if not analyzer:
         raise HTTPException(status_code=503, detail="Servizio non inizializzato")
     
