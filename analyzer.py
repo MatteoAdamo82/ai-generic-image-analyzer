@@ -3,15 +3,14 @@
 import json
 import time
 import base64
-import asyncio
 from io import BytesIO
 from PIL import Image
 from typing import Optional, Dict, Any
 import logging
 
-from config import AIProviderConfig, ServiceConfig, ImageType, DocumentType, AIProvider
+from config import AIProviderConfig, ServiceConfig, ImageType, DocumentType
 from models import (
-    AnalysisRequest, AnalysisResult, TokenUsage, ExtractedData,
+    AnalysisRequest, AnalysisResult, ExtractedData,
     PersonData, DocumentData, FinancialData, BusinessData, ProductData
 )
 from ai_providers import create_ai_provider
@@ -230,22 +229,3 @@ class ImageAnalyzer:
                 custom_fields=data
             )
     
-    async def get_service_info(self) -> Dict[str, Any]:
-        """Restituisce informazioni sul servizio"""
-        return {
-            "name": "Generic Image Analyzer",
-            "version": "1.0.0",
-            "description": "Servizio generico per l'analisi di immagini con AI",
-            "supported_providers": [provider.value for provider in list(AIProvider)],
-            "supported_image_types": [img_type.value for img_type in list(ImageType)],
-            "supported_formats": self.config.supported_formats_list,
-            "max_image_size_mb": self.config.max_image_size_mb,
-            "limits": {
-                "max_image_width": self.config.max_image_width,
-                "max_image_height": self.config.max_image_height,
-                "min_image_width": self.config.min_image_width,
-                "min_image_height": self.config.min_image_height,
-                "analysis_timeout": self.config.analysis_timeout,
-                "max_concurrent_requests": self.config.max_concurrent_requests
-            }
-        }

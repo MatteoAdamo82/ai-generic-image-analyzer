@@ -2,16 +2,11 @@
 
 import base64
 import io
-import json
-import asyncio
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Tuple
+from typing import Tuple
 import aiohttp
 from config import AIProvider, AIProviderConfig
-from models import TokenUsage, AnalysisResult, ImageType, ExtractedData
-import logging
-
-logger = logging.getLogger(__name__)
+from models import TokenUsage
 
 class BaseAIProvider(ABC):
     """Classe base per i provider AI"""
@@ -320,8 +315,9 @@ class OllamaProvider(BaseAIProvider):
                 "options": {"temperature": self.config.temperature, "num_predict": self.config.max_tokens}
             }
 
-        base_url = self.config.base_url or "http://localhost:11434"
-        url = f"{base_url}/api/generate"
+        if not self.config.base_url:
+            raise ValueError("Ollama base_url non configurato")
+        url = f"{self.config.base_url}/api/generate"
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=payload) as response:

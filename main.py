@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
+from fastapi import FastAPI, HTTPException, Depends, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt as pyjwt
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +14,7 @@ import time
 from functools import lru_cache
 
 from config import ServiceConfig, AIProvider
-from models import AnalysisRequest, AnalysisResult, ErrorResponse
+from models import AnalysisRequest, AnalysisResult
 from analyzer import ImageAnalyzer
 
 # Configurazione logging
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 # Variabili globali
 analyzer: Optional[ImageAnalyzer] = None
-config: Optional[ServiceConfig] = None
 
 @lru_cache()
 def get_config() -> ServiceConfig:
@@ -36,19 +35,19 @@ def get_config() -> ServiceConfig:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Gestisce il ciclo di vita dell'applicazione"""
-    global analyzer, config
+    global analyzer
     
     try:
         # Startup
-        config = get_config()
-        analyzer = ImageAnalyzer(config)
+        service_config = get_config()
+        analyzer = ImageAnalyzer(service_config)
         
         logger.info(f"Servizio generico di analisi media avviato")
-        logger.info(f"Host: {config.host}:{config.port}")
-        logger.info(f"Debug: {config.debug}")
-        logger.info(f"Formati supportati: {', '.join(config.supported_formats_list)}")
-        logger.info(f"Dimensione massima immagine: {config.max_image_size_mb}MB")
-        logger.info(f"Dimensione massima PDF: {config.max_pdf_size_mb}MB (max {config.max_pdf_pages} pagine)")
+        logger.info(f"Host: {service_config.host}:{service_config.port}")
+        logger.info(f"Debug: {service_config.debug}")
+        logger.info(f"Formati supportati: {', '.join(service_config.supported_formats_list)}")
+        logger.info(f"Dimensione massima immagine: {service_config.max_image_size_mb}MB")
+        logger.info(f"Dimensione massima PDF: {service_config.max_pdf_size_mb}MB (max {service_config.max_pdf_pages} pagine)")
         
         yield
         
@@ -188,30 +187,68 @@ async def analyze_image(
                 detail="Configurazione AI richiesta"
             )
         
+        request_ai_config = dict(request.ai_config)
+
         # Validazione del provider
-        provider = request.ai_config.get('provider')
+        provider = request_ai_config.get('provider')
         if not provider or provider not in [p.value for p in AIProvider]:
             raise HTTPException(
                 status_code=400,
                 detail=f"Provider non supportato: {provider}. Supportati: {[p.value for p in AIProvider]}"
             )
-        
+
+        service_config = get_config()
+        if provider == AIProvider.OLLAMA.value:
+            configured_ollama_model = service_config.ollama_model
+            configured_ollama_base_url = service_config.ollama_base_url
+
+            if not configured_ollama_model:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OLLAMA_MODEL non configurato nel file .env"
+                )
+            if not configured_ollama_base_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OLLAMA_BASE_URL non configurato nel file .env"
+                )
+
+            request_model = request_ai_config.get('model')
+            if request_model and request_model != configured_ollama_model:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Per Ollama il modello deve essere uguale a OLLAMA_MODEL"
+                )
+
+            request_base_url = request_ai_config.get('base_url')
+            if request_base_url and request_base_url != configured_ollama_base_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Per Ollama il base_url deve essere uguale a OLLAMA_BASE_URL"
+                )
+
+            request_ai_config['model'] = configured_ollama_model
+            request_ai_config['base_url'] = configured_ollama_base_url
+            request_ai_config['api_key'] = ""
+
         # Validazione API key del provider
-        if not request.ai_config.get('api_key'):
+        if provider != AIProvider.OLLAMA.value and not request_ai_config.get('api_key'):
             raise HTTPException(
                 status_code=400,
                 detail="API key del provider AI richiesta"
             )
         
         # Validazione modello
-        if not request.ai_config.get('model'):
+        if not request_ai_config.get('model'):
             raise HTTPException(
                 status_code=400,
                 detail="Modello AI richiesto"
             )
+
+        prepared_request = request.model_copy(update={"ai_config": request_ai_config})
         
         # Esegui l'analisi
-        result = await analyzer.analyze_image(request)
+        result = await analyzer.analyze_image(prepared_request)
         
         if not result.success:
             raise HTTPException(

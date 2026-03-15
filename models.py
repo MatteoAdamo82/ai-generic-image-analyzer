@@ -1,10 +1,9 @@
 """Modelli di dati per il servizio di analisi immagini"""
 
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
-from config import AIProvider, ImageType, DocumentType
-import json
+from config import ImageType, DocumentType
 
 class AnalysisRequest(BaseModel):
     """Richiesta di analisi immagine"""
@@ -137,37 +136,3 @@ class AnalysisResult(BaseModel):
             datetime: lambda v: v.isoformat()
         }
     
-class HealthResponse(BaseModel):
-    """Risposta health check"""
-    status: str = Field(..., description="Stato del servizio")
-    timestamp: datetime = Field(default_factory=datetime.now)
-    version: str = Field(default="1.0.0")
-    uptime: Optional[float] = Field(None, description="Uptime in secondi")
-    
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-    
-class ServiceInfo(BaseModel):
-    """Informazioni sul servizio"""
-    name: str = Field(default="Generic Image Analyzer")
-    version: str = Field(default="1.0.0")
-    description: str = Field(default="Servizio generico per l'analisi di immagini con AI")
-    supported_providers: List[AIProvider] = Field(default_factory=lambda: list(AIProvider))
-    supported_image_types: List[ImageType] = Field(default_factory=lambda: list(ImageType))
-    supported_formats: List[str] = Field(default_factory=lambda: ["jpg", "jpeg", "png", "webp", "gif", "bmp"])
-    max_image_size_mb: int = Field(default=10)
-    
-class ErrorResponse(BaseModel):
-    """Risposta di errore"""
-    error: bool = Field(default=True)
-    message: str = Field(..., description="Messaggio di errore")
-    code: Optional[str] = Field(None, description="Codice di errore")
-    details: Optional[Dict[str, Any]] = Field(None, description="Dettagli aggiuntivi")
-    timestamp: datetime = Field(default_factory=datetime.now)
-    
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }

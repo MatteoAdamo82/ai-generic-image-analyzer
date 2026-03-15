@@ -13,6 +13,8 @@ services:
       # Sicurezza (opzionale)
       - SERVICE_JWT_SECRET=${SERVICE_JWT_SECRET:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
       
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

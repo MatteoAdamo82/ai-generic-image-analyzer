@@ -1,6 +1,5 @@
 """Configurazione per il servizio generico di analisi immagini"""
 
-import os
 from typing import List, Dict, Any, Optional
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings
@@ -57,6 +56,8 @@ class ServiceConfig(BaseSettings):
     api_key: Optional[str] = Field(default=None, env="API_KEY")
     service_jwt_secret: Optional[str] = Field(default=None, env="SERVICE_JWT_SECRET")
     allowed_origins: str = Field(default="*", env="ALLOWED_ORIGINS")
+    ollama_model: Optional[str] = Field(default=None, env="OLLAMA_MODEL")
+    ollama_base_url: Optional[str] = Field(default=None, env="OLLAMA_BASE_URL")
     
     # Logging
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
