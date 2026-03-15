@@ -24,7 +24,7 @@ class BaseAIProvider(ABC):
         """Analizza un'immagine e restituisce il risultato con l'utilizzo dei token"""
         pass
     
-    def _prepare_image_data(self, image_data: str, image_format: str) -> str:
+    def _prepare_image_data(self, image_data: str) -> str:
         """Prepara i dati dell'immagine per l'API"""
         if image_data.startswith('data:'):
             image_data = image_data.split(',')[1]
@@ -151,11 +151,7 @@ class OpenAIProvider(BaseAIProvider):
         image_format: str,
         prompt: str
     ) -> Tuple[str, TokenUsage]:
-
-        if not prompt:
-            prompt = self._get_default_prompt()
-
-        image_data = self._prepare_image_data(image_data, image_format)
+        image_data = self._prepare_image_data(image_data)
 
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
@@ -213,11 +209,7 @@ class ClaudeProvider(BaseAIProvider):
         image_format: str,
         prompt: str
     ) -> Tuple[str, TokenUsage]:
-
-        if not prompt:
-            prompt = self._get_default_prompt()
-
-        image_data = self._prepare_image_data(image_data, image_format)
+        image_data = self._prepare_image_data(image_data)
 
         headers = {
             "x-api-key": self.config.api_key,
@@ -288,11 +280,7 @@ class OllamaProvider(BaseAIProvider):
         image_format: str,
         prompt: str
     ) -> Tuple[str, TokenUsage]:
-
-        if not prompt:
-            prompt = self._get_default_prompt()
-
-        image_data = self._prepare_image_data(image_data, image_format)
+        image_data = self._prepare_image_data(image_data)
         headers = {"Content-Type": "application/json"}
 
         if self._is_pdf(image_format):
@@ -349,11 +337,7 @@ class OpenRouterProvider(BaseAIProvider):
         image_format: str,
         prompt: str
     ) -> Tuple[str, TokenUsage]:
-
-        if not prompt:
-            prompt = self._get_default_prompt()
-
-        image_data = self._prepare_image_data(image_data, image_format)
+        image_data = self._prepare_image_data(image_data)
 
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
@@ -413,11 +397,7 @@ class GeminiProvider(BaseAIProvider):
         image_format: str,
         prompt: str
     ) -> Tuple[str, TokenUsage]:
-
-        if not prompt:
-            prompt = self._get_default_prompt()
-
-        image_data = self._prepare_image_data(image_data, image_format)
+        image_data = self._prepare_image_data(image_data)
 
         # Gemini supporta PDF nativamente con mime_type application/pdf
         mime_type = "application/pdf" if self._is_pdf(image_format) else f"image/{image_format}"

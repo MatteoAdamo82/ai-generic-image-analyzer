@@ -1,6 +1,6 @@
 """Configurazione per il servizio generico di analisi immagini"""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings
 from enum import Enum
@@ -151,19 +151,3 @@ class AIProviderConfig:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.extra_params = kwargs
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Converte la configurazione in dizionario"""
-        config = {
-            "provider": self.provider,
-            "api_key": self.api_key,
-            "model": self.model,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens
-        }
-        
-        if self.base_url:
-            config["base_url"] = self.base_url
-        
-        config.update(self.extra_params)
-        return config

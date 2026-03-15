@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Variabili globali
 analyzer: Optional[ImageAnalyzer] = None
+SUPPORTED_PROVIDERS = [provider.value for provider in AIProvider]
 
 @lru_cache()
 def get_config() -> ServiceConfig:
@@ -191,10 +192,10 @@ async def analyze_image(
 
         # Validazione del provider
         provider = request_ai_config.get('provider')
-        if not provider or provider not in [p.value for p in AIProvider]:
+        if not provider or provider not in SUPPORTED_PROVIDERS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Provider non supportato: {provider}. Supportati: {[p.value for p in AIProvider]}"
+                detail=f"Provider non supportato: {provider}. Supportati: {SUPPORTED_PROVIDERS}"
             )
 
         service_config = get_config()
