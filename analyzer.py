@@ -23,8 +23,6 @@ class ImageAnalyzer:
     def __init__(self, config: ServiceConfig):
         self.config = config
         
-    # Dimensione massima lato lungo per il resize pre-analisi (riduce tempi inferenza)
-    _RESIZE_MAX_SIDE = 1024
 
     async def analyze_image(self, request: AnalysisRequest) -> AnalysisResult:
         """Analizza un'immagine o un PDF e restituisce i risultati strutturati"""
@@ -90,7 +88,7 @@ class ImageAnalyzer:
             )
     
     def _resize_for_analysis(self, image_data_b64: str) -> str:
-        """Ridimensiona l'immagine se supera _RESIZE_MAX_SIDE px sul lato lungo."""
+        """Ridimensiona l'immagine se supera resize_max_side px sul lato lungo."""
         raw = image_data_b64
         if raw.startswith('data:'):
             raw = raw.split(',', 1)[1]
@@ -100,16 +98,16 @@ class ImageAnalyzer:
             with Image.open(BytesIO(img_bytes)) as img:
                 w, h = img.size
                 max_side = max(w, h)
-                if max_side <= self._RESIZE_MAX_SIDE:
+                if max_side <= self.config.resize_max_side:
                     return image_data_b64  # già piccola
 
-                ratio = self._RESIZE_MAX_SIDE / max_side
+                ratio = self.config.resize_max_side / max_side
                 new_w, new_h = int(w * ratio), int(h * ratio)
                 resized = img.resize((new_w, new_h), Image.LANCZOS)
 
                 buf = BytesIO()
                 fmt = img.format or 'JPEG'
-                resized.save(buf, format=fmt, quality=85)
+                resized.save(buf, format=fmt, quality=self.config.resize_quality)
                 result_b64 = base64.b64encode(buf.getvalue()).decode()
                 logger.info(f"Immagine ridimensionata da {w}x{h} a {new_w}x{new_h} ({len(image_data_b64)//1024}KB → {len(result_b64)//1024}KB)")
                 return result_b64

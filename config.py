@@ -70,6 +70,10 @@ class ServiceConfig(BaseSettings):
     max_image_width: int = Field(default=4096, env="MAX_IMAGE_WIDTH")
     max_image_height: int = Field(default=4096, env="MAX_IMAGE_HEIGHT")
 
+    # Resize pre-analisi
+    resize_max_side: int = Field(default=1024, env="RESIZE_MAX_SIDE")
+    resize_quality: int = Field(default=85, env="RESIZE_QUALITY")
+
     # Limiti PDF
     max_pdf_size_mb: int = Field(default=20, env="MAX_PDF_SIZE_MB")
     max_pdf_pages: int = Field(default=10, env="MAX_PDF_PAGES")
