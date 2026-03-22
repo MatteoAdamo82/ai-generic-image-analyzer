@@ -214,20 +214,7 @@ async def analyze_image(
                     detail="OLLAMA_BASE_URL non configurato nel file .env"
                 )
 
-            request_model = request_ai_config.get('model')
-            if request_model and request_model != configured_ollama_model:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Per Ollama il modello deve essere uguale a OLLAMA_MODEL"
-                )
-
-            request_base_url = request_ai_config.get('base_url')
-            if request_base_url and request_base_url != configured_ollama_base_url:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Per Ollama il base_url deve essere uguale a OLLAMA_BASE_URL"
-                )
-
+            # Override silenzioso: per Ollama usa sempre model/base_url dal .env del servizio
             request_ai_config['model'] = configured_ollama_model
             request_ai_config['base_url'] = configured_ollama_base_url
             request_ai_config['api_key'] = ""

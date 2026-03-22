@@ -291,6 +291,7 @@ class OllamaProvider(BaseAIProvider):
             payload = {
                 "model": self.config.model,
                 "prompt": full_prompt,
+                "format": "json",
                 "stream": False,
                 "options": {"temperature": self.config.temperature, "num_predict": self.config.max_tokens}
             }
@@ -299,6 +300,7 @@ class OllamaProvider(BaseAIProvider):
                 "model": self.config.model,
                 "prompt": prompt,
                 "images": [image_data],
+                "format": "json",
                 "stream": False,
                 "options": {"temperature": self.config.temperature, "num_predict": self.config.max_tokens}
             }

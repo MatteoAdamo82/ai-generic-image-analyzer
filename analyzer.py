@@ -23,6 +23,9 @@ class ImageAnalyzer:
     def __init__(self, config: ServiceConfig):
         self.config = config
         
+    # Dimensione massima lato lungo per il resize pre-analisi (riduce tempi inferenza)
+    _RESIZE_MAX_SIDE = 1024
+
     async def analyze_image(self, request: AnalysisRequest) -> AnalysisResult:
         """Analizza un'immagine o un PDF e restituisce i risultati strutturati"""
         start_time = time.time()
@@ -31,6 +34,11 @@ class ImageAnalyzer:
             # Valida il media (immagine o PDF)
             await self._validate_media(request.image_data, request.image_format)
 
+            # Resize immagini (non PDF) per velocizzare l'inferenza
+            image_data = request.image_data
+            if request.image_format.lower() != 'pdf':
+                image_data = self._resize_for_analysis(image_data)
+
             # Crea il provider AI
             ai_config = AIProviderConfig(**request.ai_config)
             provider = create_ai_provider(ai_config)
@@ -38,13 +46,19 @@ class ImageAnalyzer:
             # Esegui l'analisi
             prompt = request.prompt or provider._get_default_prompt()
             raw_result, token_usage = await provider.analyze_image(
-                request.image_data,
+                image_data,
                 request.image_format,
                 prompt
             )
 
             # Parsing del risultato JSON
             parsed_result = await self._parse_ai_response(raw_result)
+
+            # Inferisci image_type dalla descrizione se il modello non lo ha impostato
+            raw_type = parsed_result.get('image_type')
+            if not raw_type or raw_type in ('unknown', 'other', 'null', 'none'):
+                raw_type = self._infer_image_type(parsed_result.get('description', ''))
+                parsed_result['image_type'] = raw_type
 
             # Costruisci il risultato finale
             processing_time = time.time() - start_time
@@ -75,6 +89,34 @@ class ImageAnalyzer:
                 processing_time=processing_time
             )
     
+    def _resize_for_analysis(self, image_data_b64: str) -> str:
+        """Ridimensiona l'immagine se supera _RESIZE_MAX_SIDE px sul lato lungo."""
+        raw = image_data_b64
+        if raw.startswith('data:'):
+            raw = raw.split(',', 1)[1]
+
+        try:
+            img_bytes = base64.b64decode(raw)
+            with Image.open(BytesIO(img_bytes)) as img:
+                w, h = img.size
+                max_side = max(w, h)
+                if max_side <= self._RESIZE_MAX_SIDE:
+                    return image_data_b64  # già piccola
+
+                ratio = self._RESIZE_MAX_SIDE / max_side
+                new_w, new_h = int(w * ratio), int(h * ratio)
+                resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+                buf = BytesIO()
+                fmt = img.format or 'JPEG'
+                resized.save(buf, format=fmt, quality=85)
+                result_b64 = base64.b64encode(buf.getvalue()).decode()
+                logger.info(f"Immagine ridimensionata da {w}x{h} a {new_w}x{new_h} ({len(image_data_b64)//1024}KB → {len(result_b64)//1024}KB)")
+                return result_b64
+        except Exception as e:
+            logger.warning(f"Resize fallito, uso immagine originale: {e}")
+            return image_data_b64
+
     async def _validate_media(self, image_data: str, image_format: str) -> None:
         """Valida un media (immagine o PDF) prima dell'analisi"""
         fmt = image_format.lower()
@@ -122,35 +164,110 @@ class ImageAnalyzer:
         except Exception as e:
             raise ValueError(f"Immagine non valida: {e}")
     
+    # Mappa nomi campi alternativi (modelli piccoli usano nomi diversi)
+    _FIELD_ALIASES: Dict[str, str] = {
+        "descrizione": "description",
+        "tipo_immagine": "image_type", "tipo": "image_type", "type": "image_type",
+        "confidenza": "confidence",
+        "dati_estratti": "extracted_data", "dati": "extracted_data",
+        "testo_contenuto": "text_content", "contenuto_testo": "text_content",
+        "testo": "text_content",
+    }
+
     async def _parse_ai_response(self, raw_response: str) -> Dict[str, Any]:
-        """Parsing della risposta AI in formato JSON"""
+        """Parsing della risposta AI in formato JSON con sanitizzazione robusta"""
+        cleaned = raw_response.strip()
+
+        # Rimuovi wrapper markdown
+        if cleaned.startswith('```json'):
+            cleaned = cleaned[7:]
+        if cleaned.startswith('```'):
+            cleaned = cleaned[3:]
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+        # Sanitizza newline/tab letterali dentro stringhe JSON
+        cleaned = self._sanitize_json_strings(cleaned)
+
         try:
-            # Rimuovi eventuali caratteri di formattazione markdown
-            cleaned_response = raw_response.strip()
-            if cleaned_response.startswith('```json'):
-                cleaned_response = cleaned_response[7:]
-            if cleaned_response.endswith('```'):
-                cleaned_response = cleaned_response[:-3]
-            
-            cleaned_response = cleaned_response.strip()
-            
-            # Parsing JSON
-            parsed = json.loads(cleaned_response)
-            return parsed
-            
+            parsed = json.loads(cleaned)
         except json.JSONDecodeError as e:
             logger.warning(f"Errore nel parsing JSON: {e}. Risposta raw: {raw_response[:500]}...")
-            
-            # Fallback: estrai informazioni base dalla risposta testuale
             return {
                 "image_type": "other",
                 "confidence": 0.5,
                 "description": raw_response[:500],
-                "extracted_data": {
-                    "text_content": raw_response
-                }
+                "extracted_data": {"text_content": raw_response}
             }
+
+        # Normalizza nomi campi alternativi → nomi standard
+        parsed = self._normalize_field_names(parsed)
+        return parsed
+
+    def _sanitize_json_strings(self, text: str) -> str:
+        """Escapa newline/tab letterali dentro i valori stringa JSON."""
+        result = []
+        in_string = False
+        escape_next = False
+        for ch in text:
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+                continue
+            if ch == '\\':
+                result.append(ch)
+                escape_next = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                result.append(ch)
+                continue
+            if in_string:
+                if ch == '\n':
+                    result.append('\\n')
+                    continue
+                if ch == '\r':
+                    result.append('\\r')
+                    continue
+                if ch == '\t':
+                    result.append('\\t')
+                    continue
+            result.append(ch)
+        return ''.join(result)
+
+    def _normalize_field_names(self, data: Any) -> Any:
+        """Rinomina ricorsivamente campi con alias noti ai nomi standard."""
+        if isinstance(data, dict):
+            normalized = {}
+            for key, value in data.items():
+                std_key = self._FIELD_ALIASES.get(key.lower(), key)
+                normalized[std_key] = self._normalize_field_names(value)
+            return normalized
+        if isinstance(data, list):
+            return [self._normalize_field_names(item) for item in data]
+        return data
     
+    def _infer_image_type(self, description: str) -> str:
+        """Inferisce il tipo di immagine dalla descrizione quando il modello non lo fornisce."""
+        desc = description.lower()
+        keywords_map = {
+            'id_card': ['carta d\'identità', 'carta di identita', 'identity card', 'id card', 'carta d\'identita'],
+            'passport': ['passaporto', 'passport'],
+            'driving_license': ['patente', 'driving license', 'driver\'s license'],
+            'receipt': ['scontrino', 'ricevuta', 'receipt', 'ticket'],
+            'invoice': ['fattura', 'invoice', 'bolletta'],
+            'document': ['documento', 'document', 'contratto', 'contract', 'certificato', 'certificate',
+                        'permesso di soggiorno', 'residence permit', 'codice fiscale', 'tessera sanitaria'],
+            'business_card': ['biglietto da visita', 'business card'],
+            'menu': ['menu', 'menù', 'listino'],
+            'product': ['prodotto', 'product', 'articolo'],
+        }
+        for img_type, keywords in keywords_map.items():
+            if any(kw in desc for kw in keywords):
+                return img_type
+        return 'other'
+
     def _parse_image_type(self, image_type_str: Optional[str]) -> Optional[ImageType]:
         """Parsing del tipo di immagine"""
         if not image_type_str:
